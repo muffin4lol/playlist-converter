@@ -1,0 +1,26 @@
+name: Bug report
+description: Report a reproducible problem (no secrets or personal data).
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe expected and actual behavior. Use synthetic playlist metadata.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version / commit and browser
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Remove emails, tokens, playlist IDs, and credentials.

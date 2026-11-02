@@ -1,0 +1,4 @@
+{
+  "buildCommand": "node scripts/vercel-build.mjs",
+  "crons": [{ "path": "/api/maintenance/cleanup", "schedule": "0 3 * * *" }]
+}

@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String               @id @default(cuid())
+  firstName     String
+  lastName      String
+  email         String               @unique
+  passwordHash  String
+  emailVerified DateTime?
+  failedLogins  Int                  @default(0)
+  lockedUntil   DateTime?
+  createdAt     DateTime             @default(now())
+  sessions      Session[]
+  tokens        VerificationToken[]
+  connections   PlatformConnection[]
+  transfers     Transfer[]
+  wizard        WizardState?
+}
+
+model Session {
+  id          String               @id
+  userId      String
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  connections PlatformConnection[]
+  oauth       OAuthAttempt[]
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   String
+  expiresAt DateTime
+
+  @@index([userId])
+}
+
+model PlatformConnection {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId      String
+  session        Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  platform       String
+  role           String
+  displayName    String
+  avatar         String?
+  encryptedToken String
+  expiresAt      DateTime
+
+  @@unique([sessionId, platform, role])
+  @@index([userId])
+}
+
+model OAuthAttempt {
+  id        String   @id
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  platform  String
+  role      String
+  verifier  String
+  expiresAt DateTime
+}
+
+model WizardState {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+model Transfer {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source           String
+  sourceMode       String          @default("direct")
+  destinationMode  String          @default("direct")
+  destination      String
+  sourcePlaylistId String?
+  sourceName       String
+  destinationName  String
+  destinationId    String?
+  destinationUrl   String?
+  total            Int
+  matched          Int             @default(0)
+  notFound         Int             @default(0)
+  excluded         Int             @default(0)
+  cleanReplaced    Int             @default(0)
+  includeExplicit  Boolean
+  cleanMode        String
+  status           String          @default("pending")
+  error            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  tracks           TransferTrack[]
+
+  @@index([userId, createdAt])
+}
+
+model TransferTrack {
+  id            String   @id @default(cuid())
+  transferId    String
+  transfer      Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  position      Int
+  sourceId      String
+  title         String
+  artist        String
+  duration      Int
+  isrc          String?
+  explicit      Boolean?
+  selected      Boolean
+  destinationId String?
+  confidence    Float?
+  result        String   @default("pending")
+
+  @@unique([transferId, position])
+}
+
+model RateLimit {
+  key       String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
+}
