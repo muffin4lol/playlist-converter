@@ -14,7 +14,7 @@ Move a playlist into your own destination music account. Official authorization,
 
 [Live deployment](https://playlist-converter-alpha.vercel.app) · [Release and rollback instructions](docs/ROLLBACK.md)
 
-This branch replaces file-based playlist output with direct destination-library creation. A successful new transfer always has a destination playlist. The earlier deployed release remains the rollback checkpoint until this hotfix is released with its database migration. Existing transfer history is preserved and earlier entries that did not create remote playlists are labeled as legacy.
+This branch replaces file-based playlist output with direct destination-library creation. A successful new transfer always has a destination playlist. The hotfix and its database migration were released on 2 November 2026; the earlier release is preserved as the rollback checkpoint. Existing transfer history is preserved and earlier entries that did not create remote playlists are labeled as legacy.
 
 ![Direct playlist wizard](docs/screenshots/direct-wizard.png)
 
