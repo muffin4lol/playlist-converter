@@ -14,7 +14,7 @@
 
 The current deployment enables YouTube OAuth and CSV import/export for every platform. Other direct adapters remain available in source but need approved provider credentials; the UI shows CSV when an integration is not configured. Google publishing/verification restrictions are shown in the wizard. Temporary Gmail sender setup and later domain migration are documented in [the email guide](docs/TEMPORARY-EMAIL.md).
 
-> **Implementation status:** Local Next.js app with complete account flows, PostgreSQL persistence, six direct adapter implementations (Spotify, Apple Music, YouTube, Deezer, TIDAL, SoundCloud), CSV transport for every platform pair, resumable transfer jobs, and private history. A live CSV → YouTube Music transfer has been tested with an authorized account: private playlist creation, two matched tracks, CSV reporting, and visibility in YouTube Music were verified. Other direct providers still need live testing with approved credentials. Amazon Music and Pandora use **CSV**, not direct APIs. Provider scope and endpoint availability can vary by approval tier.
+> **Implementation status:** Deployed Next.js app with complete account flows, PostgreSQL persistence, six direct adapter implementations (Spotify, Apple Music, YouTube, Deezer, TIDAL, SoundCloud), CSV transport for every platform pair, resumable transfer jobs, and private history. A live CSV → YouTube Music transfer has been tested with an authorized account: private playlist creation, two matched tracks, CSV reporting, and visibility in YouTube Music were verified. Other direct providers still need live testing with approved credentials. Amazon Music and Pandora use **CSV**, not direct APIs. Provider scope and endpoint availability can vary by approval tier.
 >
 > Registration is free and open without a whitelist. Provider restrictions still apply: Spotify development apps currently have a five-user authorization cap and a Premium requirement. Public Spotify support needs provider approval. See [Spotify’s announcement](https://developer.spotify.com/blog/2026-02-06-update-on-developer-access-and-platform-security).
 
@@ -129,7 +129,7 @@ All runtime keys are documented in [.env.example](.env.example). The app uses cu
 | Amazon Music | No public API integration in this project                                                                                     | CSV import/export; no redirect URI or password collection.                                                                                                                                                                                                                                                                 |
 | Pandora      | No public API integration in this project                                                                                     | CSV import/export; no redirect URI or password collection.                                                                                                                                                                                                                                                                 |
 
-Use the full canonical origin before every callback path; local callbacks use the exact configured `APP_URL`. Credentials alone do not prove provider approval or full API access. Verify all flows with real approved test accounts before launch. No live credentials were supplied during development.
+Use the full canonical origin before every callback path; local callbacks use the exact configured `APP_URL`. Credentials alone do not prove provider approval or full API access. Verify all flows with real approved test accounts before launch. Live YouTube flows were tested with owner-authorized credentials stored outside the repository.
 
 ## Architecture
 
@@ -219,7 +219,7 @@ Clean replacements require `explicit === false`; unknown metadata cannot certify
 - Automatic retries only for 429 and safe reads on 5xx. Writes that may have succeeded are marked ambiguous and stopped. No claim of exactly-once remote writes; inspect the remote playlist before rerunning.
 - Run `node scripts/cleanup.mjs` daily to purge expired tokens/sessions and rate-limit records. Configure SMTP delivery monitoring and database backups under the operator’s retention policy.
 
-See [SECURITY.md](SECURITY.md). This is an implementation, not an independent security audit. Legal pages require operator identity/contact before launch.
+See [SECURITY.md](SECURITY.md). This is an implementation, not an independent security audit. Self-hosters must replace the operator identity/contact on the legal pages before their own launch.
 
 ## Development and checks
 
@@ -266,7 +266,7 @@ Register the adapter in `platforms/index.ts`, update its UI capability label in 
 
 ## Deployment
 
-Follow [the Vercel deployment guide](docs/VERCEL.md). This project intentionally targets Next.js + PostgreSQL on Vercel; it is not packaged for Sites/Cloudflare Workers. No production service has been deployed by this repository setup.
+Follow [the Vercel deployment guide](docs/VERCEL.md). This project intentionally targets Next.js + PostgreSQL on Vercel; it is not packaged for Sites/Cloudflare Workers. The live deployment uses Vercel, Neon PostgreSQL, and a temporary Gmail SMTP sender; see the deployment checkpoint for verified flows and remaining provider approvals.
 
 ## Roadmap
 
