@@ -23,7 +23,7 @@ https://playlist-converter-alpha.vercel.app
 
 ## Still requires completion / external approvals
 
-- Owner confirmed production registration, email verification and login. Browser confirmed the signed-in converter. Hosted source and destination OAuth succeeded. YouTube library fetch, two-track import, selection controls, CSV export/download, history detail and safe rerun were verified. A hosted YouTube → YouTube transfer completed with two 100% matches; the new private playlist and both songs were independently verified in YouTube Music. Password-reset link check remains pending. Do not bypass email verification or copy local test accounts/tokens into production.
+- Owner confirmed production registration, email verification and login. Browser confirmed the signed-in converter. Hosted source and destination OAuth succeeded. YouTube library fetch, two-track import, selection controls, CSV export/download, history detail and safe rerun were verified. A hosted YouTube → YouTube transfer completed with two 100% matches; the new private playlist and both songs were independently verified in YouTube Music. The owner also confirmed receipt of the production password-reset email, successful password change and subsequent login. Do not bypass email verification or copy local test accounts/tokens into production.
 - Complete sensitive-scope Google verification; production publication alone does not remove warnings or user caps.
 - Approved credentials, provider access and live tests for Spotify, Apple Music, Deezer, TIDAL and SoundCloud. No Spotify Premium developer account is currently available. Amazon Music and Pandora remain CSV-only.
 - Public GitHub repository: https://github.com/muffin4lol/playlist-converter. Source excludes credentials and runtime data; CI, issue templates, badges, MIT license, and private vulnerability reporting are configured. Check the Actions tab for current CI status.
@@ -34,3 +34,7 @@ Secrets live only in ignored local files or Vercel secrets. Do not commit/upload
 ## Hosted account validation
 
 Owner-approved public support/privacy email is configured. Google publishing status is In production; unverified sensitive scopes still show a warning and 100-user cap. Hosted export and private playlist creation were completed with the owner’s verified account. The new test playlist remains in the owner’s account. Source playlists were not modified.
+
+## GitHub publication and recovery validation
+
+Public repository: https://github.com/muffin4lol/playlist-converter. Initial CI completed successfully, including PostgreSQL migration, lint, 65 tests, production build and real HTTP/account/authorization smoke checks. Vercel is connected to this GitHub repository. Private vulnerability reporting is enabled. The owner confirmed the production reset email arrived, reset submission succeeded, and the new password allowed login.
