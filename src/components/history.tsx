@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   History as HistoryIcon,
-  Download,
   Trash2,
   RotateCcw,
   ExternalLink,
@@ -17,8 +16,6 @@ type Transfer = {
   id: string;
   sourceName: string;
   source: string;
-  sourceMode?: string;
-  destinationMode?: string;
   destination: string;
   destinationName: string;
   destinationUrl?: string;
@@ -171,12 +168,12 @@ export function History() {
                       <small>{new Date(t.createdAt).toLocaleString()}</small>
                     </td>
                     <td>
-                      {platformLabel(t.source, t.sourceMode)} →{" "}
-                      {platformLabel(t.destination, t.destinationMode)}
+                      {platformLabel(t.source)} → {platformLabel(t.destination)}
                     </td>
                     <td>
-                      {t.matched}/{t.total}{" "}
-                      {t.destinationMode === "csv" ? "exported" : "matched"}
+                      {t.status === "legacy"
+                        ? "Earlier release — no remote playlist"
+                        : `${t.matched}/${t.total} transferred`}
                       <small>
                         {t.notFound} not found · {t.excluded} excluded
                       </small>
@@ -277,7 +274,7 @@ export function HistoryDetail({ id }: { id: string }) {
           </h1>
           <p>
             {t &&
-              `${platformLabel(t.source, t.sourceMode)} → ${platformLabel(t.destination, t.destinationMode)} · ${new Date(t.createdAt).toLocaleString()}`}
+              `${platformLabel(t.source)} → ${platformLabel(t.destination)} · ${new Date(t.createdAt).toLocaleString()}`}
           </p>
         </div>
         {t && <span className={"status-badge " + t.status}>{t.status}</span>}
@@ -295,10 +292,8 @@ export function HistoryDetail({ id }: { id: string }) {
           </p>
           <div className="result-counts">
             <div>
-              <b>{t.matched}</b>
-              <span>
-                {t.destinationMode === "csv" ? "Exported" : "Matched"}
-              </span>
+              <b>{t.status === "legacy" ? 0 : t.matched}</b>
+              <span>Transferred</span>
             </div>
             <div>
               <b>{t.notFound}</b>
@@ -314,12 +309,6 @@ export function HistoryDetail({ id }: { id: string }) {
             </div>
           </div>
           <div className="history-details-actions">
-            <a
-              className="button primary"
-              href={`/api/transfers/${id}?format=csv`}
-            >
-              <Download size={14} /> CSV report
-            </a>
             {t.destinationUrl && (
               <a
                 className="button secondary"
@@ -331,7 +320,7 @@ export function HistoryDetail({ id }: { id: string }) {
               </a>
             )}
             <Button
-              disabled={busy}
+              disabled={busy || t.status === "legacy"}
               variant="outline"
               onClick={() => action("rerun")}
             >

@@ -20,10 +20,10 @@ export default function Page() {
       <h2>Platform availability</h2>
       <p>
         Direct transfers depend on provider credentials, approval, permissions,
-        catalog availability, and quotas. Some platforms use CSV import/export
-        only. YouTube playlist support is provided through the YouTube Data API;
-        availability in YouTube Music can differ. Clean versions and matches are
-        not guaranteed.
+        catalog availability, and quotas. Platforms without a supported official
+        integration are unavailable. YouTube playlist support is provided
+        through the YouTube Data API; availability in YouTube Music can differ.
+        Clean versions and matches are not guaranteed.
       </p>
       <h2>Your responsibility</h2>
       <p>

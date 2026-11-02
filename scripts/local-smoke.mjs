@@ -89,10 +89,11 @@ try {
   await call("/api/auth/verify", "POST", { token: verify }, undefined, 400);
   const wizard = {
     step: 3,
-    sourceTransport: "csv",
-    destinationTransport: "csv",
     source: "apple",
-    destination: "amazon",
+    destination: "youtube",
+    version: 2,
+    inputMode: "account",
+    playlistUrl: "",
     playlistName: "Night drive",
     includeExplicit: false,
     cleanMode: "skip",
@@ -121,28 +122,9 @@ try {
       .playlistName,
     "Night drive",
   );
-  const transfer = await (
-    await call("/api/convert", "POST", wizard, cookie)
-  ).json();
-  await call(`/api/transfers/${transfer.id}/tick`, "POST", {}, cookie);
-  await call(`/api/transfers/${transfer.id}/tick`, "POST", {}, cookie);
-  const report = await (
-    await call(`/api/transfers/${transfer.id}`, "GET", undefined, cookie)
-  ).json();
-  assert.equal(report.status, "completed");
-  assert.equal(report.matched, 1);
-  assert.equal(report.excluded, 1);
-  assert.match(
-    await (
-      await call(
-        `/api/transfers/${transfer.id}?format=csv`,
-        "GET",
-        undefined,
-        cookie,
-      )
-    ).text(),
-    /explicit_excluded/,
-  );
+  await call("/api/convert", "POST", wizard, cookie, 400);
+  // No provider credentials in this disposable smoke environment: a transfer must fail closed.
+  const missingTransfer = { id: "not-owned-or-existing" };
   const other = { ...account, email: `other-${suffix}@example.test` };
   await call("/api/auth/register", "POST", other);
   const otherLogin = await call("/api/auth/login", "POST", {
@@ -151,20 +133,26 @@ try {
   });
   const otherCookie = otherLogin.headers.get("set-cookie").split(";")[0];
   await call(
-    `/api/transfers/${transfer.id}`,
+    `/api/transfers/${missingTransfer.id}`,
     "GET",
     undefined,
     otherCookie,
     404,
   );
   await call(
-    `/api/transfers/${transfer.id}?format=csv`,
+    `/api/transfers/${missingTransfer.id}`,
     "GET",
     undefined,
     otherCookie,
     404,
   );
-  await call(`/api/transfers/${transfer.id}`, "DELETE", {}, otherCookie, 404);
+  await call(
+    `/api/transfers/${missingTransfer.id}`,
+    "DELETE",
+    {},
+    otherCookie,
+    404,
+  );
   assert.equal(
     (await (await call("/api/transfers", "GET", undefined, otherCookie)).json())
       .total,
@@ -205,7 +193,7 @@ try {
     await call("/api/export", "GET", undefined, cookie)
   ).json();
   assert.equal(exported.account.email, account.email);
-  assert.equal(exported.transfers.length, 1);
+  assert.equal(exported.transfers.length, 0);
   assert.equal(exported.account.passwordHash, undefined);
   await call("/api/auth/logout", "POST", {}, cookie);
   await call("/api/profile", "GET", undefined, cookie, 401);
@@ -214,7 +202,7 @@ try {
     JSON.stringify({ email: account.email, password: newPassword }),
   );
   console.log(
-    `PASS: ${checks} real HTTP/database checks, SMTP verification/reset, single-use links, session invalidation, CSV transfer, and cross-account isolation. Synthetic preview account saved in /tmp.`,
+    `PASS: ${checks} real HTTP/database checks, SMTP verification/reset, single-use links, session invalidation, direct-destination authorization, and cross-account isolation. Synthetic preview account saved in /tmp.`,
   );
 } finally {
   await new Promise((resolve) => smtp.close(resolve));

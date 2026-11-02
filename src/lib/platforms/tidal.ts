@@ -110,25 +110,27 @@ export const tidal: PlatformAdapter = {
     );
   },
   async handleCallback(code, verifier) {
-    const t = await api<{ access_token: string; expires_in: number }>(
-      "https://auth.tidal.com/v1/oauth2/token",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          client_id: process.env.TIDAL_CLIENT_ID!,
-          ...(process.env.TIDAL_CLIENT_SECRET
-            ? { client_secret: process.env.TIDAL_CLIENT_SECRET }
-            : {}),
-          redirect_uri: callback(),
-          code,
-          code_verifier: verifier,
-        }),
-      },
-    );
+    const t = await api<{
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    }>("https://auth.tidal.com/v1/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: process.env.TIDAL_CLIENT_ID!,
+        ...(process.env.TIDAL_CLIENT_SECRET
+          ? { client_secret: process.env.TIDAL_CLIENT_SECRET }
+          : {}),
+        redirect_uri: callback(),
+        code,
+        code_verifier: verifier,
+      }),
+    });
     const token: Token = {
       accessToken: t.access_token,
+      refreshToken: t.refresh_token,
       expiresAt: Date.now() + t.expires_in * 1000,
       displayName: "TIDAL account",
     };
@@ -137,6 +139,30 @@ export const tidal: PlatformAdapter = {
     });
     token.displayName = me.data.attributes?.username || token.displayName;
     return token;
+  },
+  async refreshToken(token) {
+    const t = await api<{
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    }>("https://auth.tidal.com/v1/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: token.refreshToken!,
+        client_id: process.env.TIDAL_CLIENT_ID!,
+        ...(process.env.TIDAL_CLIENT_SECRET
+          ? { client_secret: process.env.TIDAL_CLIENT_SECRET! }
+          : {}),
+      }),
+    });
+    return {
+      ...token,
+      accessToken: t.access_token,
+      refreshToken: t.refresh_token || token.refreshToken,
+      expiresAt: Date.now() + t.expires_in * 1000,
+    };
   },
   async fetchUserPlaylists(t) {
     const out = [];
@@ -177,6 +203,8 @@ export const tidal: PlatformAdapter = {
       ids.push(
         ...page.data.filter((x) => x.type === "tracks").map((x) => x.id),
       );
+      if (ids.length > 1000)
+        throw new Error("Playlist exceeds the supported 1,000-track limit");
       url = next(page);
     }
     return {
@@ -224,7 +252,11 @@ export const tidal: PlatformAdapter = {
       (x) => !clean || x.explicit === false,
     );
   },
-  async createPlaylist(t, name) {
+  async createPlaylist(
+    t,
+    name,
+    description = "Created with Playlist Converter",
+  ) {
     const p = await api<{ data: Resource }>(base + "/playlists", {
       method: "POST",
       headers: headers(t),
@@ -234,7 +266,7 @@ export const tidal: PlatformAdapter = {
           attributes: {
             name,
             accessType: "UNLISTED",
-            description: "Transferred with Playlist Converter",
+            description,
           },
         },
       }),

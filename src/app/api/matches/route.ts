@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { originCheck, rateLimit, decrypt } from "@/lib/security";
+
+import { originCheck, rateLimit } from "@/lib/security";
 import { trackSchema } from "@/lib/validation";
 import { failure, json } from "@/lib/http";
 import { adapter } from "@/lib/platforms";
-import type { Token } from "@/lib/platforms/types";
+import { connectionToken } from "@/lib/platforms/connection";
 import { match } from "@/lib/matching";
 export async function POST(req: Request) {
   try {
@@ -20,24 +20,12 @@ export async function POST(req: Request) {
       })
       .parse(await json(req));
     const a = adapter(v.destination);
-    if (a.mode === "csv")
-      return Response.json({
-        confidence: null,
-        title: v.track.title,
-        artist: v.track.artist,
-        result: "CSV export",
-      });
-    const c = await db.platformConnection.findFirst({
-      where: {
-        userId: s.userId,
-        sessionId: s.id,
-        platform: v.destination,
-        role: "destination",
-        expiresAt: { gt: new Date() },
-      },
-    });
-    if (!c) throw new Error("Connect destination to preview matches");
-    const token = JSON.parse(decrypt(c.encryptedToken)) as Token;
+    const token = await connectionToken(
+      s.userId,
+      s.id,
+      v.destination,
+      "destination",
+    );
     let candidates = await a.searchTrack(token, v.track, v.clean);
     if (!v.clean && v.track.isrc && !candidates.length)
       candidates = await a.searchTrack(token, { ...v.track, isrc: undefined });

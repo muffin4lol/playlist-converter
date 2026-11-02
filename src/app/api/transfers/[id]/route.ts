@@ -2,7 +2,6 @@ import { requireSession, ownerWhere } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { originCheck } from "@/lib/security";
 import { failure } from "@/lib/http";
-import { exportCsv } from "@/lib/csv";
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -16,36 +15,13 @@ export async function GET(
     });
     if (!transfer)
       return Response.json({ error: "Transfer not found" }, { status: 404 });
-    const format = new URL(req.url).searchParams.get("format");
-    if (format === "csv" || format === "playlist")
-      return new Response(
-        exportCsv(
-          transfer.tracks
-            .filter(
-              (t) =>
-                format !== "playlist" ||
-                ["exported", "matched", "review", "clean_replaced"].includes(
-                  t.result,
-                ),
-            )
-            .map((t) => ({
-              title: t.title,
-              artist: t.artist,
-              duration: t.duration,
-              isrc: t.isrc,
-              explicit: t.explicit,
-              selected: t.selected,
-              result: t.result,
-              confidence: t.confidence,
-              destinationId: t.destinationId,
-            })),
-        ),
+    if (new URL(req.url).searchParams.has("format"))
+      return Response.json(
         {
-          headers: {
-            "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": 'attachment; filename="transfer-report.csv"',
-          },
+          error:
+            "File reports are no longer available. Open the destination playlist from this report.",
         },
+        { status: 410 },
       );
     return Response.json(transfer);
   } catch (e) {
@@ -83,12 +59,17 @@ export async function POST(
       include: { tracks: { orderBy: { position: "asc" } } },
     });
     if (!t) throw new Error("Transfer not found");
+    if (t.status === "legacy")
+      throw new Error(
+        "Start a new direct transfer for this earlier-release entry",
+      );
     const data = {
-      step: 3,
+      version: 2,
+      step: 1,
+      inputMode: "account",
+      playlistUrl: "",
       source: t.source,
-      sourceTransport: t.sourceMode,
-      destinationTransport: t.destinationMode,
-      destination: t.destination,
+      destination: t.destination === t.source ? "" : t.destination,
       playlistId: t.sourcePlaylistId || undefined,
       playlistName: t.destinationName,
       sourcePlaylistName: t.sourceName,
@@ -98,6 +79,7 @@ export async function POST(
         id: x.sourceId,
         title: x.title,
         artist: x.artist,
+        album: x.album || undefined,
         duration: x.duration,
         isrc: x.isrc || undefined,
         explicit: x.explicit,

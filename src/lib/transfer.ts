@@ -1,21 +1,25 @@
 import { db } from "./db";
 import { adapter } from "./platforms";
-import { decrypt } from "./security";
+import { connectionToken } from "./platforms/connection";
 import { match } from "./matching";
-import type { Track, Token } from "./platforms/types";
-// One track per request keeps jobs inside serverless limits. A database lease prevents concurrent ticks.
+import { platformLabel } from "@/components/platforms";
+import type { Track } from "./platforms/types";
+
+// Matching and writes are bounded per tick. The lease serializes playlist order.
 export async function tick(userId: string, sessionId: string, id: string) {
-  const cutoff = new Date(Date.now() - 120000);
   const lease = await db.transfer.updateMany({
     where: {
       id,
       userId,
       OR: [
         { status: "pending" },
-        { status: "processing", updatedAt: { lt: cutoff } },
+        {
+          status: "processing",
+          updatedAt: { lt: new Date(Date.now() - 120000) },
+        },
       ],
     },
-    data: { status: "processing" },
+    data: { status: "processing", error: null },
   });
   if (!lease.count) return;
   try {
@@ -24,46 +28,49 @@ export async function tick(userId: string, sessionId: string, id: string) {
       include: { tracks: { orderBy: { position: "asc" } } },
     });
     const a = adapter(t.destination);
-    const csv = a.mode === "csv" || t.destinationMode === "csv";
-    const c = csv
-      ? null
-      : await db.platformConnection.findFirst({
-          where: {
-            userId,
-            sessionId,
-            platform: t.destination,
-            role: "destination",
-            expiresAt: { gt: new Date() },
-          },
-        });
-    if (!csv && !c) throw new Error("Reconnect destination account");
-    const token = c ? (JSON.parse(decrypt(c.encryptedToken)) as Token) : null;
+    const token = await connectionToken(
+      userId,
+      sessionId,
+      t.destination,
+      "destination",
+    );
     let destinationId = t.destinationId;
-    if (!csv && !destinationId) {
-      // Record the intent first. A crash after remote creation must never silently create a second playlist.
+    if (destinationId === "__creation_pending__")
+      throw new Error(
+        "Playlist creation interrupted. Inspect destination before rerunning.",
+      );
+    if (t.tracks.some((x) => x.result === "adding"))
+      throw new Error(
+        "Track addition interrupted. Inspect destination before rerunning.",
+      );
+    if (!destinationId) {
       await db.transfer.update({
         where: { id },
         data: { destinationId: "__creation_pending__" },
       });
-      const p = await a.createPlaylist(token!, t.destinationName);
-      destinationId = p.id;
+      const description = `Created with Playlist Converter • Imported from ${platformLabel(t.source)}: ${t.sourceName}`;
+      const playlist = await a.createPlaylist(
+        token,
+        t.destinationName,
+        description,
+      );
+      destinationId = playlist.id;
       await db.transfer.update({
         where: { id },
-        data: { destinationId: p.id, destinationUrl: p.url },
+        data: { destinationId: playlist.id, destinationUrl: playlist.url },
       });
     }
-    if (destinationId === "__creation_pending__")
-      throw new Error(
-        "Playlist creation interrupted; inspect destination before rerunning",
-      );
-    const row = t.tracks.find((x) => x.result === "pending");
-    if (row) {
+    // Match at most three per tick, then drain up to 50 prepared tracks in order.
+    // YouTube's official API accepts only one playlist item per write; its adapter serializes that batch.
+    const pending = t.tracks.filter((x) => x.result === "pending").slice(0, 3);
+    for (const row of pending) {
       const source: Track = {
         id: row.sourceId,
         title: row.title,
         artist: row.artist,
+        album: row.album || undefined,
         duration: row.duration,
-        isrc: row.isrc ?? undefined,
+        isrc: row.isrc || undefined,
         explicit: row.explicit,
         selected: row.selected,
       };
@@ -72,7 +79,7 @@ export async function tick(userId: string, sessionId: string, id: string) {
         row.explicit === true &&
         t.cleanMode === "replace" &&
         !row.selected;
-      if (!row.selected && !replace)
+      if (!row.selected && !replace) {
         await db.transferTrack.update({
           where: { id: row.id },
           data: {
@@ -82,84 +89,97 @@ export async function tick(userId: string, sessionId: string, id: string) {
                 : "skipped",
           },
         });
-      else if (csv)
+        continue;
+      }
+      let candidates = await a.searchTrack(token, source, replace);
+      let best = match(source, candidates, replace);
+      if (!replace && source.isrc && (!best || best.confidence < 0.65)) {
+        candidates = await a.searchTrack(token, { ...source, isrc: undefined });
+        best = match(source, candidates, false);
+      }
+      await db.transferTrack.update({
+        where: { id: row.id },
+        data:
+          !best || best.confidence < 0.65
+            ? { result: "not_found", confidence: best?.confidence }
+            : {
+                result: replace ? "ready_clean" : "ready",
+                destinationId: best.track.id,
+                confidence: best.confidence,
+              },
+      });
+    }
+    let tracks = await db.transferTrack.findMany({
+      where: { transferId: id },
+      orderBy: { position: "asc" },
+    });
+    const batchSize = a.id === "youtube" ? 5 : 50;
+    const ready = tracks
+      .filter((x) => ["ready", "ready_clean"].includes(x.result))
+      .slice(0, batchSize);
+    // Accumulate a batch across ticks; flush when no unmatched tracks remain.
+    if (
+      ready.length &&
+      (ready.length >= batchSize || !tracks.some((x) => x.result === "pending"))
+    ) {
+      const claimed = await db.transferTrack.updateMany({
+        where: {
+          id: { in: ready.map((x) => x.id) },
+          result: { in: ["ready", "ready_clean"] },
+        },
+        data: { result: "adding" },
+      });
+      if (claimed.count !== ready.length)
+        throw new Error("Transfer changed while preparing a batch");
+      await a.addTracks(
+        token,
+        destinationId!,
+        ready.map((x) => x.destinationId!),
+      );
+      for (const row of ready)
         await db.transferTrack.update({
           where: { id: row.id },
           data: {
-            result: replace ? "explicit_excluded" : "exported",
-            confidence: null,
+            result:
+              row.result === "ready_clean"
+                ? "clean_replaced"
+                : (row.confidence || 0) < 0.85
+                  ? "review"
+                  : "matched",
           },
         });
-      else {
-        let candidates = await a.searchTrack(token!, source, replace);
-        if (!replace && source.isrc && !candidates.length)
-          candidates = await a.searchTrack(token!, {
-            ...source,
-            isrc: undefined,
-          });
-        const best = match(source, candidates, replace);
-        if (!best || best.confidence < 0.65)
-          await db.transferTrack.update({
-            where: { id: row.id },
-            data: { result: "not_found", confidence: best?.confidence },
-          });
-        else {
-          // Persist "adding" before external writes; ambiguous failures require manual inspection, never automatic duplicate writes.
-          const claimed = await db.transferTrack.updateMany({
-            where: { id: row.id, result: "pending" },
-            data: {
-              result: "adding",
-              destinationId: best.track.id,
-              confidence: best.confidence,
-            },
-          });
-          if (claimed.count) {
-            await a.addTracks(token!, destinationId!, [best.track.id]);
-            await db.transferTrack.update({
-              where: { id: row.id },
-              data: {
-                result: replace
-                  ? "clean_replaced"
-                  : best.confidence < 0.85
-                    ? "review"
-                    : "matched",
-              },
-            });
-          }
-        }
-      }
+      tracks = await db.transferTrack.findMany({
+        where: { transferId: id },
+        orderBy: { position: "asc" },
+      });
     }
-    const tracks = await db.transferTrack.findMany({
-      where: { transferId: id },
-    });
-    const remaining = tracks.some((x) => x.result === "pending");
-    const notFound = tracks.filter((x) => x.result === "not_found").length,
-      excluded = tracks.filter((x) => x.result === "explicit_excluded").length,
-      matched = tracks.filter((x) =>
-        ["matched", "review", "clean_replaced", "exported"].includes(x.result),
-      ).length;
+    const remaining = tracks.some((x) =>
+      ["pending", "ready", "ready_clean"].includes(x.result),
+    );
+    const notFound = tracks.filter((x) => x.result === "not_found").length;
     await db.transfer.update({
       where: { id },
       data: {
-        status: remaining
-          ? "pending"
-          : notFound || tracks.some((x) => x.result === "adding")
-            ? "partial"
-            : "completed",
-        matched,
+        status: remaining ? "pending" : notFound ? "partial" : "completed",
+        matched: tracks.filter((x) =>
+          ["matched", "review", "clean_replaced"].includes(x.result),
+        ).length,
         notFound,
-        excluded,
+        excluded: tracks.filter((x) => x.result === "explicit_excluded").length,
         cleanReplaced: tracks.filter((x) => x.result === "clean_replaced")
           .length,
       },
     });
-  } catch {
+  } catch (error) {
+    const reconnect =
+      error instanceof Error && error.message.startsWith("Reconnect");
     await db.transfer.updateMany({
       where: { id, userId },
       data: {
-        status: "failed",
-        error:
-          "Transfer stopped. Check your connection and provider permissions. If a write was interrupted, inspect the destination before rerunning to avoid duplicates.",
+        status: reconnect ? "pending" : "failed",
+        error: reconnect
+          ? "Reconnect your destination account, then resume this transfer."
+          : "Transfer stopped. Check provider permissions or rate limits. Inspect your destination playlist before rerunning an interrupted write to avoid duplicates.",
       },
     });
   }

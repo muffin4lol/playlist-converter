@@ -11,7 +11,18 @@ export function platformAvailability() {
     soundcloud: !!(
       process.env.SOUNDCLOUD_CLIENT_ID && process.env.SOUNDCLOUD_CLIENT_SECRET
     ),
-    amazon: false,
-    pandora: false,
+  };
+}
+
+export function publicPlaylistAvailability() {
+  return {
+    spotify: !!(
+      process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET
+    ),
+    youtube: !!process.env.YOUTUBE_API_KEY,
+    apple: !!process.env.APPLE_MUSIC_DEVELOPER_TOKEN,
+    deezer: true,
+    tidal: false,
+    soundcloud: false,
   };
 }

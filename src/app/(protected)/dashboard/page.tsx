@@ -68,8 +68,7 @@ export default async function Dashboard() {
                       <Link href={"/history/" + t.id}>{t.sourceName}</Link>
                     </td>
                     <td>
-                      {platformLabel(t.source, t.sourceMode)} →{" "}
-                      {platformLabel(t.destination, t.destinationMode)}
+                      {platformLabel(t.source)} → {platformLabel(t.destination)}
                     </td>
                     <td>
                       {t.matched} / {t.total}

@@ -4,14 +4,23 @@ import { wizardSchema } from "@/lib/validation";
 import { originCheck, rateLimit } from "@/lib/security";
 import { failure, json } from "@/lib/http";
 import { adapter } from "@/lib/platforms";
+import { connectionToken } from "@/lib/platforms/connection";
+import { platformAvailability } from "@/lib/platforms/availability";
 export async function POST(req: Request) {
   try {
     originCheck(req);
     const s = await requireSession(true);
     await rateLimit(`convert:${s.userId}`, 25);
     const data = wizardSchema.parse(await json(req));
+    if (!data.source || !data.destination || data.source === data.destination)
+      throw new Error("Select different source and destination platforms");
+    if (!platformAvailability()[data.destination])
+      throw new Error(
+        "Destination is not configured for direct playlist creation",
+      );
     adapter(data.source);
     adapter(data.destination);
+    await connectionToken(s.userId, s.id, data.destination, "destination");
     if (!data.tracks.length) throw new Error("Select a playlist first");
     if (!data.tracks.some((t) => t.selected) && data.cleanMode !== "replace")
       throw new Error("Select at least one track");
@@ -19,8 +28,6 @@ export async function POST(req: Request) {
       data: {
         userId: s.userId,
         source: data.source,
-        sourceMode: data.sourceTransport,
-        destinationMode: data.destinationTransport,
         destination: data.destination,
         sourcePlaylistId: data.playlistId,
         sourceName: data.sourcePlaylistName || data.playlistName,
@@ -34,6 +41,7 @@ export async function POST(req: Request) {
             sourceId: x.id,
             title: x.title,
             artist: x.artist,
+            album: x.album,
             duration: x.duration,
             isrc: x.isrc,
             explicit: x.explicit,

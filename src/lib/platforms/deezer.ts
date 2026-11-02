@@ -5,6 +5,7 @@ type DTrack = {
   title: string;
   artist: { name: string };
   duration: number;
+  album?: { title: string };
   isrc?: string;
   explicit_lyrics?: boolean;
 };
@@ -12,7 +13,10 @@ type DPlaylist = { id: number; title: string; nb_tracks: number; link: string };
 const base = "https://api.deezer.com";
 const callback = () => `${process.env.APP_URL}/api/platforms/deezer/callback`;
 const url = (path: string, token: string, extra: Record<string, string> = {}) =>
-  base + path + "?" + new URLSearchParams({ access_token: token, ...extra });
+  base +
+  path +
+  "?" +
+  new URLSearchParams({ ...(token ? { access_token: token } : {}), ...extra });
 async function deezerApi<T>(url: string, init: RequestInit = {}): Promise<T> {
   const data = await api<T & { error?: { message: string } }>(url, init);
   if (data.error)
@@ -23,6 +27,7 @@ export const mapDeezer = (x: DTrack): Track => ({
   id: String(x.id),
   title: x.title,
   artist: x.artist.name,
+  album: x.album?.title,
   duration: x.duration * 1000,
   isrc: x.isrc,
   explicit: x.explicit_lyrics ?? null,
@@ -67,6 +72,21 @@ export const deezer: PlatformAdapter = {
       avatar: me.picture_small,
     };
   },
+  async fetchPublicPlaylist(id) {
+    const p = await deezerApi<DPlaylist & { public?: boolean }>(
+      base + "/playlist/" + encodeURIComponent(id),
+    );
+    if (p.public === false)
+      throw new Error("Playlist is private. Connect your source account.");
+    return deezer.fetchPlaylist(
+      {
+        accessToken: "",
+        expiresAt: Date.now() + 60000,
+        displayName: "Public playlist",
+      },
+      id,
+    );
+  },
   async fetchUserPlaylists(t) {
     const out = [];
     let next: string | null = url("/user/me/playlists", t.accessToken, {
@@ -98,6 +118,8 @@ export const deezer: PlatformAdapter = {
     while (next) {
       const page: { data: DTrack[]; next?: string } = await deezerApi(next);
       tracks.push(...page.data.map(mapDeezer));
+      if (tracks.length > 1000)
+        throw new Error("Playlist exceeds the supported 1,000-track limit");
       next = page.next || null;
     }
     return { name: p.title, tracks };
@@ -121,26 +143,31 @@ export const deezer: PlatformAdapter = {
     );
     return p.data.map(mapDeezer).filter((x) => !clean || x.explicit === false);
   },
-  async createPlaylist(t, name) {
+  async createPlaylist(
+    t,
+    name,
+    description = "Created with Playlist Converter",
+  ) {
     const p = await deezerApi<{ id: number }>(
       url("/user/me/playlists", t.accessToken),
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ title: name }),
+        body: new URLSearchParams({ title: name, description }),
       },
     );
     return { id: String(p.id), url: "https://www.deezer.com/playlist/" + p.id };
   },
   async addTracks(t, id, ids) {
-    await deezerApi(
-      url("/playlist/" + encodeURIComponent(id) + "/tracks", t.accessToken),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ songs: ids.join(",") }),
-      },
-    );
+    for (let i = 0; i < ids.length; i += 50)
+      await deezerApi(
+        url("/playlist/" + encodeURIComponent(id) + "/tracks", t.accessToken),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ songs: ids.slice(i, i + 50).join(",") }),
+        },
+      );
   },
   async revoke(t) {
     await deezerApi(url("/user/me/permissions", t.accessToken), {
