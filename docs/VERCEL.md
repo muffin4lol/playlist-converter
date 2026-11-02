@@ -16,8 +16,8 @@ Import the repository as a Next.js project in Vercel. Select Node.js 22 or later
 - APP_URL = `https://your-canonical-domain.example`
 - TOKEN_ENCRYPTION_KEY = output of `openssl rand -hex 32`
 - SMTP_URL and EMAIL_FROM
-- SPOTIFY_CLIENT_ID (for Spotify)
-- GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (for YouTube)
+- SPOTIFY_CLIENT_ID (Spotify authorization); SPOTIFY_CLIENT_SECRET for public catalog reads
+- GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (YouTube authorization); YOUTUBE_API_KEY for public playlist reads
 - APPLE_MUSIC_DEVELOPER_TOKEN and APPLE_MUSIC_STOREFRONT (for Apple Music)
 - DEEZER_APP_ID and DEEZER_APP_SECRET (for Deezer)
 - TIDAL_CLIENT_ID, optional TIDAL_CLIENT_SECRET, TIDAL_COUNTRY_CODE (for TIDAL)
@@ -48,8 +48,8 @@ Transfer tick routes set a 60-second maximum. Choose a Vercel plan/runtime that 
 - Exercise forgotten-password and one-time reset links; check old sessions stop working.
 - Connect source and destination using provider consent; deny consent once and verify recovery.
 - Transfer a small test playlist. Spotify, YouTube, and SoundCloud create private playlists; TIDAL creates unlisted playlists, and Deezer uses provider defaults. Check actual destination tracks and confidence flags.
-- Test CSV → CSV, an explicit exclusion, and clean replacement where supported.
-- Use two accounts to check history detail/CSV/rerun/delete ownership.
+- Test an explicit exclusion, a public playlist URL, and clean replacement where supported.
+- Use two accounts to check history detail/rerun/delete ownership.
 - Confirm nonce CSP, HSTS, secure httpOnly __Host-pc_session cookie, and exact-origin CSRF rejection.
 - Check export, history deletion, account deletion, and provider disconnection behavior.
 
@@ -62,3 +62,7 @@ See [temporary Gmail and domain migration](TEMPORARY-EMAIL.md) for low-volume te
 Schedule `node scripts/cleanup.mjs` daily in a trusted environment with DATABASE_URL. The script deletes expired sessions, platform connections, reset/verification tokens, OAuth state, and rate-limit rows. Protect logs, monitor SMTP and provider errors without secrets, and set backup retention to match the privacy policy. Rate limits depend on trusted ingress headers for IP-level controls; email/account limits remain database-backed.
 
 If a write stops ambiguously, inspect the destination playlist before rerunning. Never automatically repeat uncertain external writes. Roll back code through Vercel if needed; database rollback requires an explicit migration/restore plan.
+
+## First-release hotfix
+
+Read ROLLBACK.md before applying the direct-only migration. The source and destination must differ, and destination credentials are mandatory. There is no file-output fallback. Preview environments require separate credentials and databases.

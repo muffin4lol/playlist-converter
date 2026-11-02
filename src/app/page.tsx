@@ -103,8 +103,8 @@ export default function Home() {
               {p.name}
               <small style={{ display: "block", fontSize: 10 }}>
                 {available[p.id as keyof typeof available]
-                  ? "Direct + CSV"
-                  : "CSV import / export"}
+                  ? "Direct connection"
+                  : "Connection not configured"}
               </small>
             </div>
           ))}
@@ -118,8 +118,8 @@ export default function Home() {
               <h3>Choose your next stop.</h3>
               <p>
                 Choose your platforms. Use official consent for an enabled
-                connection, or bring a CSV from any platform. Each card shows
-                the available transport.
+                connection, or paste a public playlist link. Connect a different
+                destination and save directly to your library.
               </p>
             </article>
             <article className="feature-box">
@@ -135,7 +135,7 @@ export default function Home() {
               <h3>Press play, somewhere new.</h3>
               <p>
                 We match your music, create your playlist, and give you a
-                detailed report. CSV exports are available for every platform.
+                detailed result screen with a link to your new playlist.
               </p>
             </article>
           </div>
@@ -154,8 +154,9 @@ export default function Home() {
             Sign up free <ArrowRight size={15} />
           </Link>
           <p style={{ fontSize: 10, marginTop: 20 }}>
-            Direct integrations depend on provider approval. CSV import/export
-            is available for platforms without a direct integration.
+            Direct integrations depend on provider approval and configured
+            credentials. Every new transfer saves directly to a destination
+            account.
           </p>
         </section>
       </main>

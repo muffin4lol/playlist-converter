@@ -5,6 +5,7 @@ type Item = {
   name: string;
   artists: { name: string }[];
   duration_ms: number;
+  album?: { name: string };
   explicit: boolean;
   external_ids?: { isrc?: string };
 };
@@ -13,6 +14,7 @@ const map = (t: Item): Track => ({
   title: t.name,
   artist: t.artists.map((a) => a.name).join(", "),
   duration: t.duration_ms,
+  album: t.album?.name,
   isrc: t.external_ids?.isrc,
   explicit: t.explicit,
   selected: true,
@@ -70,6 +72,58 @@ export const spotify: PlatformAdapter = {
       avatar: me.images?.[0]?.url,
     };
   },
+  async refreshToken(token) {
+    const t = await api<{
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    }>("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: token.refreshToken!,
+        client_id: process.env.SPOTIFY_CLIENT_ID!,
+      }),
+    });
+    return {
+      ...token,
+      accessToken: t.access_token,
+      refreshToken: t.refresh_token || token.refreshToken,
+      expiresAt: Date.now() + t.expires_in * 1000,
+    };
+  },
+  async fetchPublicPlaylist(id) {
+    if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET)
+      throw new Error(
+        "Public Spotify links require server-side app credentials. Connect your source account instead.",
+      );
+    const t = await api<{ access_token: string; expires_in: number }>(
+      "https://accounts.spotify.com/api/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization:
+            "Basic " +
+            Buffer.from(
+              process.env.SPOTIFY_CLIENT_ID +
+                ":" +
+                process.env.SPOTIFY_CLIENT_SECRET,
+            ).toString("base64"),
+        },
+        body: new URLSearchParams({ grant_type: "client_credentials" }),
+      },
+    );
+    return spotify.fetchPlaylist(
+      {
+        accessToken: t.access_token,
+        expiresAt: Date.now() + t.expires_in * 1000,
+        displayName: "Public catalog",
+      },
+      id,
+    );
+  },
   async fetchUserPlaylists(t) {
     const out = [];
     let url: string | null = base + "/me/playlists?limit=50";
@@ -113,6 +167,8 @@ export const spotify: PlatformAdapter = {
         const x = entry.item ?? entry.track;
         if (x?.id) tracks.push(map(x));
       }
+      if (tracks.length > 1000)
+        throw new Error("Playlist exceeds the supported 1,000-track limit");
       url = page.next;
     }
     return { name: p.name, tracks };
@@ -132,7 +188,11 @@ export const spotify: PlatformAdapter = {
       .map(map)
       .filter((x) => !clean || x.explicit === false);
   },
-  async createPlaylist(t, name) {
+  async createPlaylist(
+    t,
+    name,
+    description = "Created with Playlist Converter",
+  ) {
     const p = await api<{ id: string; external_urls: { spotify: string } }>(
       base + "/me/playlists",
       {
@@ -144,7 +204,7 @@ export const spotify: PlatformAdapter = {
         body: JSON.stringify({
           name,
           public: false,
-          description: "Transferred with Playlist Converter",
+          description,
         }),
       },
     );

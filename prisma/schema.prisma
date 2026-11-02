@@ -56,6 +56,7 @@ model PlatformConnection {
   displayName    String
   avatar         String?
   encryptedToken String
+  refreshLeaseUntil DateTime?
   expiresAt      DateTime
 
   @@unique([sessionId, platform, role])
@@ -84,8 +85,6 @@ model Transfer {
   userId           String
   user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   source           String
-  sourceMode       String          @default("direct")
-  destinationMode  String          @default("direct")
   destination      String
   sourcePlaylistId String?
   sourceName       String
@@ -116,6 +115,7 @@ model TransferTrack {
   sourceId      String
   title         String
   artist        String
+  album         String?
   duration      Int
   isrc          String?
   explicit      Boolean?

@@ -5,7 +5,10 @@ import { originCheck } from "@/lib/security";
 import { wizardSchema } from "@/lib/validation";
 import { failure, json } from "@/lib/http";
 import { adapter } from "@/lib/platforms";
-import { platformAvailability } from "@/lib/platforms/availability";
+import {
+  platformAvailability,
+  publicPlaylistAvailability,
+} from "@/lib/platforms/availability";
 export async function GET() {
   try {
     const s = await requireSession();
@@ -21,10 +24,11 @@ export async function GET() {
       }),
     ]);
     return Response.json({
-      state: state?.data,
+      state: normalizeWizard(state?.data),
       connections,
       verified: !!s.user.emailVerified,
       availability: platformAvailability(),
+      publicAvailability: publicPlaylistAvailability(),
       youtubeTesting: process.env.GOOGLE_OAUTH_TESTING === "true",
     });
   } catch (e) {
@@ -36,8 +40,14 @@ export async function PUT(req: NextRequest) {
     originCheck(req);
     const s = await requireSession(true);
     const data = wizardSchema.parse(await json(req));
-    adapter(data.source);
-    adapter(data.destination);
+    if (data.transferId) {
+      const transfer = await db.transfer.findFirst({
+        where: { id: data.transferId, userId: s.userId },
+      });
+      if (!transfer) throw new Error("Transfer not found");
+    }
+    if (data.source) adapter(data.source);
+    if (data.destination) adapter(data.destination);
     await db.wizardState.upsert({
       where: { userId: s.userId },
       create: { userId: s.userId, data },
@@ -47,4 +57,34 @@ export async function PUT(req: NextRequest) {
   } catch (e) {
     return failure(e);
   }
+}
+
+function normalizeWizard(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const data = value as Record<string, unknown>;
+  if (data.version === 2) return wizardSchema.safeParse(data).data || null;
+  const allowed = [
+    "spotify",
+    "youtube",
+    "apple",
+    "deezer",
+    "tidal",
+    "soundcloud",
+  ];
+  const source = allowed.includes(String(data.source)) ? data.source : "";
+  const destination =
+    allowed.includes(String(data.destination)) && data.destination !== source
+      ? data.destination
+      : "";
+  return (
+    wizardSchema.safeParse({
+      ...data,
+      version: 2,
+      step: 0,
+      source,
+      destination,
+      inputMode: "account",
+      playlistUrl: "",
+    }).data || null
+  );
 }

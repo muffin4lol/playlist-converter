@@ -66,6 +66,6 @@ describe("production operations", () => {
         (value) => typeof value === "boolean",
       ),
     ).toBe(true);
-    expect(platformAvailability().amazon).toBe(false);
+    expect(Object.keys(platformAvailability())).not.toContain("amazon");
   });
 });

@@ -63,8 +63,8 @@ describe("strict history ownership", () => {
       }),
     );
   });
-  it("returns 404 for another user’s detail and CSV", async () => {
-    for (const suffix of ["", "?format=csv"]) {
+  it("returns 404 for another user’s detail", async () => {
+    for (const suffix of [""]) {
       expect(
         (
           await detail(

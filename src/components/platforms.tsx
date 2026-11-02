@@ -36,27 +36,9 @@ export const platforms = [
     symbol: "☁",
     mode: "OAuth",
   },
-  {
-    id: "amazon",
-    name: "Amazon Music",
-    color: "#46d9eb",
-    symbol: "a",
-    mode: "CSV",
-  },
-  {
-    id: "pandora",
-    name: "Pandora",
-    color: "#6a9bff",
-    symbol: "P",
-    mode: "CSV",
-  },
-];
-export function platformLabel(id: string, transport?: string) {
-  const platform = platforms.find((p) => p.id === id);
-  const name = platform?.name || id;
-  return transport === "csv" || platform?.mode === "CSV"
-    ? `${name} (CSV)`
-    : name;
+] as const;
+export function platformLabel(id: string) {
+  return platforms.find((p) => p.id === id)?.name || id;
 }
 export function PlatformIcon({ id, size = "" }: { id: string; size?: string }) {
   const p = platforms.find((p) => p.id === id) || platforms[0];

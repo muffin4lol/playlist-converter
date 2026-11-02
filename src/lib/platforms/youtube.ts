@@ -40,7 +40,8 @@ export const youtube: PlatformAdapter = {
         state,
         code_challenge: challenge,
         code_challenge_method: "S256",
-        access_type: "online",
+        access_type: "offline",
+        prompt: "consent",
         scope:
           role === "source"
             ? "https://www.googleapis.com/auth/youtube.readonly"
@@ -49,21 +50,22 @@ export const youtube: PlatformAdapter = {
     );
   },
   async handleCallback(code, verifier) {
-    const t = await api<{ access_token: string; expires_in: number }>(
-      "https://oauth2.googleapis.com/token",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: callback(),
-          client_id: process.env.GOOGLE_CLIENT_ID!,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-          code_verifier: verifier,
-        }),
-      },
-    );
+    const t = await api<{
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    }>("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: callback(),
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        code_verifier: verifier,
+      }),
+    });
     const p = await api<{
       items: {
         snippet: { title: string; thumbnails: { default: { url: string } } };
@@ -73,10 +75,45 @@ export const youtube: PlatformAdapter = {
     });
     return {
       accessToken: t.access_token,
+      refreshToken: t.refresh_token,
       expiresAt: Date.now() + t.expires_in * 1000,
       displayName: p.items[0]?.snippet.title || "YouTube account",
       avatar: p.items[0]?.snippet.thumbnails?.default?.url,
     };
+  },
+  async refreshToken(token) {
+    const t = await api<{ access_token: string; expires_in: number }>(
+      "https://oauth2.googleapis.com/token",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: token.refreshToken!,
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        }),
+      },
+    );
+    return {
+      ...token,
+      accessToken: t.access_token,
+      expiresAt: Date.now() + t.expires_in * 1000,
+    };
+  },
+  async fetchPublicPlaylist(id) {
+    if (!process.env.YOUTUBE_API_KEY)
+      throw new Error(
+        "Public YouTube links require an API key. Connect your source account instead.",
+      );
+    return youtube.fetchPlaylist(
+      {
+        accessToken: "",
+        expiresAt: Date.now() + 60000,
+        displayName: "Public playlist",
+      },
+      id,
+    );
   },
   async fetchUserPlaylists(t) {
     const out = [];
@@ -112,39 +149,60 @@ export const youtube: PlatformAdapter = {
     return out;
   },
   async fetchPlaylist(t, id) {
-    const head = await api<{ items: { snippet: { title: string } }[] }>(
+    const read = <T>(url: string) =>
+      api<T>(
+        t.accessToken
+          ? url
+          : url + "&key=" + encodeURIComponent(process.env.YOUTUBE_API_KEY!),
+        { headers: t.accessToken ? bearer(t.accessToken) : {} },
+      );
+    const head = await read<{ items: { snippet: { title: string } }[] }>(
       base + "/playlists?" + new URLSearchParams({ part: "snippet", id }),
-      { headers: bearer(t.accessToken) },
     );
+    if (!head.items.length) throw new Error("Playlist not found or private");
     const tracks: Track[] = [];
     let next = "";
     do {
       const p: {
-        items: { contentDetails: { videoId: string } }[];
+        items: {
+          contentDetails: { videoId: string };
+          snippet?: { title: string; videoOwnerChannelTitle?: string };
+        }[];
         nextPageToken?: string;
-      } = await api(
+      } = await read(
         base +
           "/playlistItems?" +
           new URLSearchParams({
-            part: "contentDetails",
+            part: "contentDetails,snippet",
             playlistId: id,
             maxResults: "50",
             ...(next ? { pageToken: next } : {}),
           }),
-        { headers: bearer(t.accessToken) },
       );
       const ids = p.items.map((x) => x.contentDetails.videoId);
       if (ids.length) {
-        const v = await api<{ items: Video[] }>(
+        const v = await read<{ items: Video[] }>(
           base +
             "/videos?" +
             new URLSearchParams({
               part: "snippet,contentDetails",
               id: ids.join(","),
             }),
-          { headers: bearer(t.accessToken) },
         );
-        tracks.push(...v.items.map(map));
+        const byId = new Map(v.items.map((video) => [video.id, map(video)]));
+        for (const item of p.items)
+          tracks.push(
+            byId.get(item.contentDetails.videoId) || {
+              id: item.contentDetails.videoId,
+              title: item.snippet?.title || "Unavailable video",
+              artist: item.snippet?.videoOwnerChannelTitle || "Unknown artist",
+              duration: 0,
+              explicit: null,
+              selected: true,
+            },
+          );
+        if (tracks.length > 1000)
+          throw new Error("Playlist exceeds the supported 1,000-track limit");
       }
       next = p.nextPageToken || "";
     } while (next);
@@ -174,7 +232,11 @@ export const youtube: PlatformAdapter = {
     );
     return videos.items.map(map).filter((x) => !clean || x.explicit === false);
   },
-  async createPlaylist(t, name) {
+  async createPlaylist(
+    t,
+    name,
+    description = "Created with Playlist Converter",
+  ) {
     const p = await api<{ id: string }>(
       base + "/playlists?part=snippet,status",
       {
@@ -184,7 +246,7 @@ export const youtube: PlatformAdapter = {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          snippet: { title: name },
+          snippet: { title: name, description },
           status: { privacyStatus: "private" },
         }),
       },

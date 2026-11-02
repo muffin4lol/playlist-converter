@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { confidence, match, explicitSelection } from "../src/lib/matching";
 import type { Track } from "../src/lib/platforms/types";
-import { importCsv, exportCsv } from "../src/lib/csv";
 const track: Track = {
   id: "1",
   title: "Midnight City",
@@ -139,23 +138,4 @@ it("bulk explicit changes preserve non-explicit manual choices", () => {
       "skip",
     )[0].selected,
   ).toBe(false);
-});
-describe("CSV handling", () => {
-  it("preserves quoted commas and flags", () => {
-    expect(
-      importCsv(
-        'title,artist,duration,explicit\n"Song, part 2",Artist,123000,true',
-      )[0],
-    ).toMatchObject({
-      title: "Song, part 2",
-      explicit: true,
-      duration: 123000,
-    });
-  });
-  it("does not infer false from missing explicit flag", () =>
-    expect(importCsv("title,artist\nSong,Artist")[0].explicit).toBeNull());
-  it("neutralizes spreadsheet formula injection", () =>
-    expect(exportCsv([{ title: '=HYPERLINK("bad")' }])).toContain(
-      "'=HYPERLINK",
-    ));
 });

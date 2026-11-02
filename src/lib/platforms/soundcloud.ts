@@ -55,30 +55,56 @@ export const soundcloud: PlatformAdapter = {
     );
   },
   async handleCallback(code, verifier) {
-    const t = await api<{ access_token: string; expires_in: number }>(
-      "https://secure.soundcloud.com/oauth/token",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          code_verifier: verifier,
-          client_id: process.env.SOUNDCLOUD_CLIENT_ID!,
-          client_secret: process.env.SOUNDCLOUD_CLIENT_SECRET!,
-          redirect_uri: callback(),
-        }),
-      },
-    );
+    const t = await api<{
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    }>("https://secure.soundcloud.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        code_verifier: verifier,
+        client_id: process.env.SOUNDCLOUD_CLIENT_ID!,
+        client_secret: process.env.SOUNDCLOUD_CLIENT_SECRET!,
+        redirect_uri: callback(),
+      }),
+    });
     const me = await api<{ username: string; avatar_url?: string }>(
       base + "/me",
       { headers: headers({ accessToken: t.access_token }) },
     );
     return {
       accessToken: t.access_token,
+      refreshToken: t.refresh_token,
       expiresAt: Date.now() + t.expires_in * 1000,
       displayName: me.username,
       avatar: me.avatar_url,
+    };
+  },
+  async refreshToken(token) {
+    const t = await api<{
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    }>("https://secure.soundcloud.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: token.refreshToken!,
+        client_id: process.env.SOUNDCLOUD_CLIENT_ID!,
+        ...(process.env.SOUNDCLOUD_CLIENT_SECRET
+          ? { client_secret: process.env.SOUNDCLOUD_CLIENT_SECRET! }
+          : {}),
+      }),
+    });
+    return {
+      ...token,
+      accessToken: t.access_token,
+      refreshToken: t.refresh_token || token.refreshToken,
+      expiresAt: Date.now() + t.expires_in * 1000,
     };
   },
   async fetchUserPlaylists(t) {
@@ -107,6 +133,8 @@ export const soundcloud: PlatformAdapter = {
       base + "/playlists/" + encodeURIComponent(id),
       { headers: headers(t) },
     );
+    if (p.track_count > 1000 || p.tracks.length > 1000)
+      throw new Error("Playlist exceeds the supported 1,000-track limit");
     const tracks: Track[] = [];
     for (let i = 0; i < p.tracks.length; i += 50) {
       const batch = p.tracks.slice(i, i + 50);
@@ -137,12 +165,16 @@ export const soundcloud: PlatformAdapter = {
       .map(mapSoundCloud)
       .filter((x) => !clean || x.explicit === false);
   },
-  async createPlaylist(t, name) {
+  async createPlaylist(
+    t,
+    name,
+    description = "Created with Playlist Converter",
+  ) {
     const p = await api<SCPlaylist>(base + "/playlists", {
       method: "POST",
       headers: headers(t),
       body: JSON.stringify({
-        playlist: { title: name, sharing: "private", tracks: [] },
+        playlist: { title: name, description, sharing: "private", tracks: [] },
       }),
     });
     return { id: String(p.id), url: p.permalink_url };

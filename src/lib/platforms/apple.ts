@@ -7,7 +7,7 @@ export function appleHeaders(t: Token) {
     throw new Error("Apple Music is not configured");
   return {
     Authorization: `Bearer ${process.env.APPLE_MUSIC_DEVELOPER_TOKEN}`,
-    "Music-User-Token": t.accessToken,
+    ...(t.accessToken ? { "Music-User-Token": t.accessToken } : {}),
     "Content-Type": "application/json",
   };
 }
@@ -16,6 +16,7 @@ type Song = {
   attributes: {
     name: string;
     artistName: string;
+    albumName?: string;
     durationInMillis?: number;
     isrc?: string;
     contentRating?: string;
@@ -26,6 +27,7 @@ export const mapApple = (x: Song): Track => ({
   id: x.id,
   title: x.attributes.name,
   artist: x.attributes.artistName,
+  album: x.attributes.albumName,
   duration: x.attributes.durationInMillis || 0,
   isrc: x.attributes.isrc,
   explicit:
@@ -44,6 +46,8 @@ async function pages<T>(path: string, t: Token) {
     if (url.origin !== base) throw new Error("Invalid platform pagination URL");
     const page: Page<T> = await api(url.href, { headers: appleHeaders(t) });
     out.push(...page.data);
+    if (out.length > 1000)
+      throw new Error("Playlist exceeds the supported 1,000-track limit");
     next = page.next;
   }
   return out;
@@ -59,6 +63,24 @@ export const apple: PlatformAdapter = {
   },
   async handleCallback() {
     throw new Error("Apple Music uses MusicKit, not an OAuth callback");
+  },
+  async fetchPublicPlaylist(id, region) {
+    if (!id.startsWith("pl."))
+      throw new Error(
+        "Private Apple Music playlist: connect the source account",
+      );
+    const token = {
+      accessToken: "",
+      expiresAt: Date.now() + 60000,
+      displayName: "Public catalog",
+    };
+    const prefix = `/v1/catalog/${region || storefront()}/playlists/${encodeURIComponent(id)}`;
+    const p = await api<Page<{ attributes: { name: string } }>>(base + prefix, {
+      headers: appleHeaders(token),
+    });
+    if (!p.data.length) throw new Error("Playlist not found or private");
+    const songs = await pages<Song>(base + prefix + "/tracks?limit=100", token);
+    return { name: p.data[0].attributes.name, tracks: songs.map(mapApple) };
   },
   async fetchUserPlaylists(t) {
     const p = await pages<{ id: string; attributes: { name: string } }>(
@@ -109,7 +131,11 @@ export const apple: PlatformAdapter = {
       .map(mapApple)
       .filter((x) => !clean || x.explicit === false);
   },
-  async createPlaylist(t, name) {
+  async createPlaylist(
+    t,
+    name,
+    description = "Created with Playlist Converter",
+  ) {
     const p = await api<Page<{ id: string; attributes: { url?: string } }>>(
       base + "/v1/me/library/playlists",
       {
@@ -118,7 +144,7 @@ export const apple: PlatformAdapter = {
         body: JSON.stringify({
           attributes: {
             name,
-            description: "Transferred with Playlist Converter",
+            description,
           },
         }),
       },

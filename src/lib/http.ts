@@ -7,7 +7,7 @@ export function failure(e: unknown) {
         ? e.message
         : "Request failed";
   const allowed =
-    /Unauthorized|Verify your|Too many|Invalid|Passwords|password|email|configured|Unsupported|CSV|Reconnect|not found|already|required|expired|Connect|Select|in progress|permission|failed/i.test(
+    /Unauthorized|Verify your|Too many|Invalid|Passwords|password|email|configured|Unsupported|Playlist|playlist|source|limit|public|private|Reconnect|not found|already|required|expired|Connect|Select|in progress|permission|failed/i.test(
       message,
     );
   return Response.json(

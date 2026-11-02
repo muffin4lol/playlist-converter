@@ -11,9 +11,13 @@ import {
   originCheck,
   rateLimit,
 } from "@/lib/security";
-import type { Token, Role } from "@/lib/platforms/types";
+import type { Role } from "@/lib/platforms/types";
 import { failure, json } from "@/lib/http";
 import { z } from "zod";
+import { connectionToken } from "@/lib/platforms/connection";
+import { playlistReference } from "@/lib/platforms/playlist-url";
+import { trackSchema } from "@/lib/validation";
+import { api } from "@/lib/platforms/request";
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ platform: string; action: string }> },
@@ -63,13 +67,17 @@ export async function GET(
           platform,
           role: attempt.role,
           encryptedToken: encrypt(JSON.stringify(t)),
-          expiresAt: new Date(t.expiresAt),
+          expiresAt: new Date(
+            t.refreshToken ? s.expiresAt.getTime() : t.expiresAt,
+          ),
           displayName: t.displayName,
           avatar: t.avatar,
         },
         update: {
           encryptedToken: encrypt(JSON.stringify(t)),
-          expiresAt: new Date(t.expiresAt),
+          expiresAt: new Date(
+            t.refreshToken ? s.expiresAt.getTime() : t.expiresAt,
+          ),
           displayName: t.displayName,
           avatar: t.avatar,
         },
@@ -78,68 +86,46 @@ export async function GET(
         new URL("/converter?connected=" + platform, process.env.APP_URL),
       );
     }
-    const c = await db.platformConnection.findFirst({
-      where: {
-        userId: s.userId,
-        sessionId: s.id,
+    const checked = (playlist: { name: string; tracks: unknown[] }) => {
+      if (!playlist.tracks.length)
+        throw new Error("Playlist is empty, private, or unavailable");
+      if (playlist.tracks.length > 1000)
+        throw new Error("Playlist exceeds the supported 1,000-track limit");
+      return Response.json({
+        name: playlist.name,
+        tracks: playlist.tracks.map((track) => trackSchema.parse(track)),
+      });
+    };
+    if (action === "public") {
+      const ref = playlistReference(
         platform,
-        role,
-        expiresAt: { gt: new Date() },
-      },
-    });
-    if (!c) throw new Error("Reconnect your platform account");
-    const t = JSON.parse(decrypt(c.encryptedToken)) as Token;
+        req.nextUrl.searchParams.get("url") || "",
+      );
+      if (a.fetchPublicPlaylist)
+        return checked(await a.fetchPublicPlaylist(ref.id, ref.storefront));
+      throw new Error(
+        `${a.name} requires a source account connection to read playlist links through its official API. Choose Load from my account.`,
+      );
+    }
+    const token = await connectionToken(s.userId, s.id, platform, role);
     if (action === "playlists")
-      return Response.json(await a.fetchUserPlaylists(t));
+      return Response.json(await a.fetchUserPlaylists(token));
     if (action === "playlist") {
       let id = req.nextUrl.searchParams.get("id") || "";
-      if (id.startsWith("https://")) {
-        const url = new URL(id);
-        if (platform === "spotify" && url.hostname === "open.spotify.com")
-          id = url.pathname.split("/playlist/")[1]?.split("/")[0] || "";
-        else if (
-          platform === "youtube" &&
-          ["music.youtube.com", "www.youtube.com", "youtube.com"].includes(
-            url.hostname,
-          )
-        )
-          id = url.searchParams.get("list") || "";
-        else if (platform === "apple" && url.hostname === "music.apple.com")
-          id = url.pathname.split("/").at(-1) || "";
-        else if (
-          platform === "tidal" &&
-          ["tidal.com", "www.tidal.com", "listen.tidal.com"].includes(
-            url.hostname,
-          )
-        )
-          id = url.pathname.split("/").at(-1) || "";
-        else if (
-          platform === "deezer" &&
-          ["deezer.com", "www.deezer.com"].includes(url.hostname)
-        )
-          id = url.pathname.split("/").at(-1) || "";
-        else if (
-          platform === "soundcloud" &&
-          ["soundcloud.com", "www.soundcloud.com"].includes(url.hostname)
-        ) {
-          const resolved = await fetch(
-            "https://api.soundcloud.com/resolve?" +
-              new URLSearchParams({ url: url.href }),
-            {
-              headers: { Authorization: `OAuth ${t.accessToken}` },
-              signal: AbortSignal.timeout(15000),
-            },
-          );
-          if (!resolved.ok) throw new Error("Invalid SoundCloud playlist URL");
-          const result = await resolved.json();
-          if (result.kind !== "playlist")
-            throw new Error("Invalid SoundCloud playlist URL");
-          id = String(result.id);
-        } else throw new Error("Invalid playlist URL");
+      if (id.startsWith("https://")) id = playlistReference(platform, id).id;
+      if (platform === "soundcloud" && id.startsWith("https://")) {
+        const resolved = await api<{ kind: string; id: number }>(
+          "https://api.soundcloud.com/resolve?" +
+            new URLSearchParams({ url: id }),
+          { headers: { Authorization: `OAuth ${token.accessToken}` } },
+        );
+        if (resolved.kind !== "playlist")
+          throw new Error("Invalid SoundCloud playlist URL");
+        id = String(resolved.id);
       }
       if (!/^[A-Za-z0-9_.-]{1,200}$/.test(id))
         throw new Error("Invalid playlist identifier");
-      return Response.json(await a.fetchPlaylist(t, id));
+      return checked(await a.fetchPlaylist(token, id));
     }
     throw new Error("Invalid action");
   } catch (e) {
