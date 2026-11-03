@@ -27,3 +27,9 @@ The development compiler repeatedly reloaded the local page; browser checks used
 - Migration applied exactly once; obsolete columns removed, both new columns present, existing account/history records preserved.
 - Live landing/login return 200; converter redirects signed-out visitors to login; wizard/history APIs return 401 without a session.
 - Signed-in production wizard shows Step 1 of 4, direct-library copy and expected provider availability.
+
+## New-transfer navigation regression — 3 November 2026
+
+New transfer links on history, overview and the sidebar explicitly discard only the current wizard draft and start Step 1. Plain converter URLs, OAuth callbacks and history reruns retain resume behavior. Full navigation also discards old result/polling state when the user starts again from the converter itself.
+
+Validated with 83 automated tests, 33 local HTTP/database/SMTP checks, and browser checks from a saved Step 4 draft through History → New transfer, refreshing a new Step 2 draft, and sidebar reset. Authentication, exact-origin protection and per-user draft ownership are enforced. Transfer history and connections are not deleted. No schema migration is required.

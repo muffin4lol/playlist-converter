@@ -122,6 +122,26 @@ try {
       .playlistName,
     "Night drive",
   );
+  await call(
+    "/api/wizard",
+    "DELETE",
+    undefined,
+    cookie,
+    400,
+    "https://untrusted.example",
+  );
+  assert.equal(
+    (await (await call("/api/wizard", "GET", undefined, cookie)).json()).state
+      .step,
+    3,
+  );
+  await call("/api/wizard", "DELETE", undefined, cookie);
+  assert.equal(
+    (await (await call("/api/wizard", "GET", undefined, cookie)).json()).state,
+    null,
+  );
+  await call("/api/wizard", "DELETE", undefined, cookie); // New transfer is idempotent.
+  await call("/api/wizard", "PUT", wizard, cookie);
   await call("/api/convert", "POST", wizard, cookie, 400);
   // No provider credentials in this disposable smoke environment: a transfer must fail closed.
   const missingTransfer = { id: "not-owned-or-existing" };

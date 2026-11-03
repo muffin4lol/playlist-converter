@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NewTransferLink } from "@/components/new-transfer-link";
 import { ArrowRight, ArrowLeftRight, History } from "lucide-react";
 import { requirePage } from "@/lib/auth";
 import { platformLabel } from "@/components/platforms";
@@ -30,9 +31,9 @@ export default async function Dashboard() {
           </h1>
           <p>New destinations for the music you love.</p>
         </div>
-        <Link href="/converter" className="button primary">
+        <NewTransferLink href="/converter" className="button primary">
           New transfer <ArrowRight size={15} />
-        </Link>
+        </NewTransferLink>
       </div>
       <div className="stats-grid">
         <div className="stat-card">
@@ -90,9 +91,9 @@ export default async function Dashboard() {
             <p>
               Start your first transfer and bring your favorite playlist along.
             </p>
-            <Link href="/converter" className="button primary">
+            <NewTransferLink href="/converter" className="button primary">
               Convert a playlist <ArrowRight size={14} />
-            </Link>
+            </NewTransferLink>
           </div>
         )}
       </div>

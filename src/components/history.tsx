@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { NewTransferLink } from "@/components/new-transfer-link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -87,9 +88,9 @@ export function History() {
           </h1>
           <p>Your transfer history is private and belongs only to you.</p>
         </div>
-        <Link href="/converter" className="button primary">
+        <NewTransferLink href="/converter" className="button primary">
           New transfer <ArrowRight size={15} />
-        </Link>
+        </NewTransferLink>
       </div>
       <div className="content-card">
         <div className="history-filters">

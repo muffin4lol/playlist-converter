@@ -59,6 +59,18 @@ export async function PUT(req: NextRequest) {
   }
 }
 
+// Discard the current draft only. Completed transfer reports and provider grants remain.
+export async function DELETE(req: Request) {
+  try {
+    originCheck(req);
+    const s = await requireSession();
+    await db.wizardState.deleteMany({ where: { userId: s.userId } });
+    return Response.json({ ok: true });
+  } catch (e) {
+    return failure(e);
+  }
+}
+
 function normalizeWizard(value: unknown) {
   if (!value || typeof value !== "object") return null;
   const data = value as Record<string, unknown>;
