@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { NewTransferLink } from "./new-transfer-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeftRight,
@@ -40,19 +41,22 @@ export function Shell({
             },
             { href: "/history", label: "Transfer history", icon: History },
             { href: "/profile", label: "Account settings", icon: Settings },
-          ].map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={
-                pathname.startsWith(href) ? "nav-link active" : "nav-link"
-              }
-            >
-              <Icon size={18} />
-              {label}
-              {href === "/converter" && <span className="nav-plus">+</span>}
-            </Link>
-          ))}
+          ].map(({ href, label, icon: Icon }) => {
+            const NavLink = href === "/converter" ? NewTransferLink : Link;
+            return (
+              <NavLink
+                key={href}
+                href={href}
+                className={
+                  pathname.startsWith(href) ? "nav-link active" : "nav-link"
+                }
+              >
+                <Icon size={18} />
+                {label}
+                {href === "/converter" && <span className="nav-plus">+</span>}
+              </NavLink>
+            );
+          })}
         </nav>
         <div className="sidebar-bottom">
           <div className="free-card">

@@ -102,7 +102,18 @@ export function Converter() {
   }
   useEffect(() => {
     let active = true;
-    request<Awaited<ReturnType<typeof refresh>>>("/api/wizard")
+    // New-transfer navigation resets only the draft; history and connections stay intact.
+    const startNew =
+      new URLSearchParams(window.location.search).get("new") === "1";
+    const load = async () => {
+      if (startNew) {
+        await request("/api/wizard", "DELETE");
+        // Consume the intent: refresh/OAuth returns should resume this new draft.
+        window.history.replaceState(window.history.state, "", "/converter");
+      }
+      return request<Awaited<ReturnType<typeof refresh>>>("/api/wizard");
+    };
+    load()
       .then((data) => {
         if (!active) return;
         setConnections(data.connections);
@@ -115,8 +126,12 @@ export function Converter() {
           if (data.state.transferId) {
             setTransferId(data.state.transferId);
             request<Report>(`/api/transfers/${data.state.transferId}`)
-              .then(setReport)
-              .catch((e) => setError(errorMessage(e)));
+              .then((result) => {
+                if (active) setReport(result);
+              })
+              .catch((e) => {
+                if (active) setError(errorMessage(e));
+              });
           }
         }
         const outcome = new URLSearchParams(window.location.search).get(
