@@ -53,7 +53,7 @@ New playlist description: `Created with Playlist Converter • Imported from Spo
 
 Disabled connections need provider credentials and approval, not an invitation to this app. YouTube Music has no separate official playlist API: this implementation uses YouTube Data API v3. YouTube explicit ratings are unknown unless age-restricted; they cannot certify that a song is clean. Apple Music's developer JWT is intentionally supplied to MusicKit in authenticated browsers; the signing key and OAuth client secrets stay outside frontend code.
 
-Spotify development/API access restrictions, Google unverified-app warnings and user caps, and other provider approval rules are external requirements. Credentials alone do not prove API access. Only YouTube flows have been live tested; other adapter contracts have automated tests but require approved-account validation.
+Spotify development/API access restrictions, Google unverified-app warnings and user caps, and other provider approval rules are external requirements. Credentials alone do not prove API access. Public Deezer → YouTube Music has passed a live two-track transfer test, including the destination playlist and provenance description. Other adapter contracts have automated tests but require approved-account validation.
 
 Public/private URL errors are reported without scraping. Shortened links are not followed; paste the canonical provider playlist URL. Maximum supported playlist size is 1,000 tracks, with a clear error instead of silent truncation.
 

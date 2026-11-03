@@ -18,7 +18,7 @@ Destination acceptance checks: connected account name, official consent, correct
 - Optimized production build passed with the webpack compiler.
 - Local database migration applied successfully. Production migration and promotion succeeded on 2 November 2026 after a private database backup.
 
-The development compiler repeatedly reloaded the local page; browser checks used the webpack development compiler. A real cross-platform transfer is still pending acceptance; automated and page checks do not prove an external playlist write.
+The development compiler repeatedly reloaded the local page; browser checks used the webpack development compiler. Live cross-platform acceptance succeeded on 3 November 2026: the signed-in app loaded a 15-track public Deezer playlist without a Deezer login, previewed two selected tracks at 99% confidence, and created a private playlist directly in the authorized YouTube Music account. Both selected tracks transferred, with zero unmatched tracks. The destination UI confirmed the playlist description includes the source platform and original playlist name, and both songs appear in order. No music-account passwords were collected.
 
 ## Production release checks
 

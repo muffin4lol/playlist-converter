@@ -11,3 +11,5 @@ Released 2 November 2026 after a verified private database backup and successful
 Production currently has Google credentials, but other direct destination credentials and public YouTube API-key access have not been configured. Source and destination must differ in this release; do not claim every pair has live account validation. Additional provider approvals remain external prerequisites.
 
 Secrets stay outside source control. The production database, encryption key, SMTP credentials and Google secrets must be preserved through release. Preview builds deliberately have no production credentials and need separate test services.
+
+Live acceptance on 3 November 2026: public Deezer source → private YouTube Music destination, two selected songs transferred, zero unmatched, ordered songs and provenance description verified on YouTube Music. Google warning/consent was completed by the account owner.
