@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
@@ -21,27 +22,50 @@ export async function POST(
     if (action === "register") {
       const v = registerSchema.parse(data);
       await rateLimit(`register:${v.email}`, 4);
-      const existing = await db.user.findUnique({ where: { email: v.email } });
-      if (!existing) {
-        const user = await db.user.create({
-          data: {
-            firstName: v.firstName,
-            lastName: v.lastName,
-            email: v.email,
-            passwordHash: await bcrypt.hash(v.password, 12),
-          },
-        });
+      let user = await db.user.findUnique({ where: { email: v.email } });
+      if (!user) {
         try {
-          await sendAccountEmail(user.id, user.email, "verify");
-        } catch {
-          console.error(
-            "Verification email delivery failed; check SMTP configuration.",
-          );
+          user = await db.user.create({
+            data: {
+              firstName: v.firstName,
+              lastName: v.lastName,
+              email: v.email,
+              passwordHash: await bcrypt.hash(v.password, 12),
+            },
+          });
+        } catch (error) {
+          // Another registration may have created the account while we hashed the password.
+          if (
+            !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+            error.code !== "P2002"
+          )
+            throw error;
+          user = await db.user.findUnique({ where: { email: v.email } });
+          if (!user) throw error;
         }
+      }
+      if (user.emailVerified) {
+        return Response.json(
+          { error: "Account already exists. Please sign in." },
+          { status: 409 },
+        );
+      }
+      try {
+        await sendAccountEmail(user.id, user.email, "verify");
+      } catch {
+        console.error(
+          "Verification email delivery failed; check SMTP configuration.",
+        );
+        return Response.json(
+          {
+            error: "We couldn’t send the verification email. Please try again.",
+          },
+          { status: 503 },
+        );
       }
       return Response.json({
         message:
-          "Check your email to verify your account. If already registered, use login or reset password.",
+          "Verification email sent. Check your inbox to verify your account.",
       });
     }
     if (action === "login") {

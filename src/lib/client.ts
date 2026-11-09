@@ -17,6 +17,9 @@ export async function request<T = Record<string, unknown>>(
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await r.json();
-  if (!r.ok) throw new Error(data.error || "Request failed");
+  if (!r.ok)
+    throw Object.assign(new Error(data.error || "Request failed"), {
+      status: r.status,
+    });
   return data;
 }

@@ -80,6 +80,19 @@ describe("authentication routes", () => {
     expect((await call("register", signup)).status).toBe(200);
     expect(sendEmail).toHaveBeenCalledWith("u", signup.email, "verify");
   });
+  it("reports a verification delivery failure and lets registration retry", async () => {
+    const user = { id: "u", email: signup.email, emailVerified: null };
+    mockDb.user.findUnique.mockResolvedValueOnce(null).mockResolvedValue(user);
+    mockDb.user.create.mockResolvedValue(user);
+    sendEmail.mockRejectedValueOnce(new Error("SMTP unavailable"));
+    const failure = await call("register", signup);
+    expect(failure.status).toBe(503);
+    expect((await failure.json()).error).toMatch(/Please try again/);
+    expect((await call("register", signup)).status).toBe(200);
+    expect(sendEmail).toHaveBeenCalledTimes(2);
+    expect(mockDb.user.create).toHaveBeenCalledOnce();
+    expect(mockDb.user.update).not.toHaveBeenCalled();
+  });
   it("sets opaque httpOnly cookie after login", async () => {
     mockDb.user.findUnique.mockResolvedValue({
       id: "u",

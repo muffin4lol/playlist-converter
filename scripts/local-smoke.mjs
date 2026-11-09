@@ -73,7 +73,9 @@ try {
     "https://untrusted.example",
   );
   await call("/api/auth/register", "POST", account);
-  assert.ok(messages.length);
+  assert.equal(messages.length, 1);
+  await call("/api/auth/register", "POST", account);
+  assert.equal(messages.length, 2);
   const verify = new URL(
     tokens().match(/http[^\s]+verify-email\?token=[A-Za-z0-9_-]+/)[0],
   ).searchParams.get("token");
@@ -86,6 +88,18 @@ try {
   assert.match(r.headers.get("set-cookie"), /SameSite=lax/i);
   await call("/api/convert", "POST", {}, cookie, 400);
   await call("/api/auth/verify", "POST", { token: verify });
+  const verifiedDuplicate = await call(
+    "/api/auth/register",
+    "POST",
+    account,
+    undefined,
+    409,
+  );
+  assert.match(
+    (await verifiedDuplicate.json()).error,
+    /Account already exists/,
+  );
+  assert.equal(messages.length, 2);
   await call("/api/auth/verify", "POST", { token: verify }, undefined, 400);
   const wizard = {
     step: 3,

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, LoaderCircle } from "lucide-react";
@@ -15,8 +15,20 @@ export function AuthForm({
   const [error, setError] = useState(""),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
+  const [accountExists, setAccountExists] = useState(false);
   const router = useRouter(),
     params = useSearchParams();
+  const existingAccountMessage = "Account already exists. Please sign in.";
+  const loginNotice =
+    mode === "login" && params.get("notice") === "account-exists";
+  useEffect(() => {
+    if (!accountExists) return;
+    const timer = window.setTimeout(
+      () => router.replace("/login?notice=account-exists"),
+      1600,
+    );
+    return () => window.clearTimeout(timer);
+  }, [accountExists, router]);
   const title = {
     register: "Your next soundtrack starts here.",
     login: "Welcome back.",
@@ -28,6 +40,7 @@ export function AuthForm({
     e.preventDefault();
     setBusy(true);
     setError("");
+    setMessage("");
     try {
       const data = Object.fromEntries(new FormData(e.currentTarget));
       if (mode === "register") registerSchema.parse(data);
@@ -52,7 +65,16 @@ export function AuthForm({
         router.refresh();
       } else setMessage(r.message || "Done.");
     } catch (e) {
-      setError(errorMessage(e));
+      if (
+        mode === "register" &&
+        e instanceof Error &&
+        "status" in e &&
+        e.status === 409
+      ) {
+        setAccountExists(true);
+      } else {
+        setError(errorMessage(e));
+      }
     } finally {
       setBusy(false);
     }
@@ -90,6 +112,14 @@ export function AuthForm({
                 ? "Confirm your email to unlock playlist conversions."
                 : "Your music is right where you left it."}
           </p>
+          {(accountExists || loginNotice) && (
+            <div className="error-box" role="alert">
+              {existingAccountMessage}{" "}
+              {accountExists && (
+                <Link href="/login?notice=account-exists">Go to login →</Link>
+              )}
+            </div>
+          )}
           {error && (
             <div className="error-box" role="alert">
               {error}
@@ -100,7 +130,7 @@ export function AuthForm({
               {message} <Link href="/login">Go to login →</Link>
             </div>
           )}
-          {!message && (
+          {!accountExists && (!message || mode === "register") && (
             <>
               {mode === "register" && (
                 <div className="form-grid">
