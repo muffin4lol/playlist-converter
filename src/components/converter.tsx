@@ -84,6 +84,11 @@ export function Converter() {
     >
   >({});
   const [youtubeTesting, setYoutubeTesting] = useState(false);
+  const hasDestination = (source: string) =>
+    platforms.some(
+      (platform) => platform.id !== source && available[platform.id],
+    );
+
   async function refresh() {
     const data = await request<{
       state: WizardState | null;
@@ -470,7 +475,9 @@ export function Converter() {
                           className={`platform-card ${state.source === p.id ? "selected" : ""}`}
                           aria-pressed={state.source === p.id}
                           disabled={
-                            busy || (!available[p.id] && !publicAvailable[p.id])
+                            busy ||
+                            (!available[p.id] && !publicAvailable[p.id]) ||
+                            !hasDestination(p.id)
                           }
                           onClick={() => {
                             setState({
@@ -491,11 +498,15 @@ export function Converter() {
                           <PlatformIcon id={p.id} />
                           <b>{p.name}</b>
                           <small>
-                            {available[p.id]
-                              ? "Account or playlist link"
-                              : publicAvailable[p.id]
-                                ? "Public playlist links"
-                                : "Not configured"}
+                            {!available[p.id] && !publicAvailable[p.id]
+                              ? "Not configured"
+                              : !hasDestination(p.id)
+                                ? "No compatible destination available"
+                                : available[p.id] && publicAvailable[p.id]
+                                  ? "Account or playlist link"
+                                  : available[p.id]
+                                    ? "Account connection"
+                                    : "Public playlist links"}
                           </small>
                         </button>
                       ))}
@@ -643,13 +654,10 @@ export function Converter() {
                           </button>
                         ))}
                     </div>
-                    {!platforms.some(
-                      (p) => p.id !== state.source && available[p.id],
-                    ) && (
+                    {!hasDestination(state.source) && (
                       <p role="status">
-                        No different destination is configured yet. The operator
-                        must add approved provider credentials before this
-                        source can be converted.
+                        There is no destination for this source right now. Go
+                        back to Step 1 to see which sources can be transferred.
                       </p>
                     )}
                     {state.destination && connectionCard("destination")}
@@ -913,7 +921,10 @@ export function Converter() {
                       <Button
                         disabled={
                           busy ||
-                          (state.step === 0 && !state.source) ||
+                          (state.step < 2 && !hasDestination(state.source)) ||
+                          (state.step === 0 &&
+                            !available[state.source] &&
+                            !publicAvailable[state.source]) ||
                           (state.step === 1 && !state.tracks.length) ||
                           (state.step === 2 &&
                             (!state.destination || !connected("destination")))
